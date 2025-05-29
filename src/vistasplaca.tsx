@@ -1,10 +1,13 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { UploadCloud, Database } from "lucide-react";
+import { Link } from "react-router-dom";
+import "../src/styles/vistasplaca.css";
 
 interface Placa {
   texto: string;
   confianza: number;
+  tipo: string;
 }
 
 const DetectorDePlacas: React.FC = () => {
@@ -32,81 +35,81 @@ const DetectorDePlacas: React.FC = () => {
       });
 
       const data = await res.json();
-      console.log("Respuesta del backend:", data);
       setPlacas(data.placas || []);
     } catch (error) {
       console.error("Error al enviar la imagen:", error);
     }
   };
 
-  const obtenerTipoVehiculo = (placa: string): "Carro" | "Moto" | "Desconocido" => {
-    if (/^[A-Z]{3}\d{3}$/.test(placa)) return "Carro";
-    if (/^[A-Z]{3}\d{2}[A-Z]$/.test(placa)) return "Moto";
-    return "Desconocido";
-  };
-
-  const guardarEnBaseDeDatos = async (placa: string) => {
-    const tipo = obtenerTipoVehiculo(placa);
-    const hora = new Date().toISOString();
-
-    setGuardando(placa);
+  const guardarEnBaseDeDatos = async (texto: string, tipo: string) => {
+    setGuardando(texto);
 
     try {
-      const res = await fetch("http://localhost:5000/guardar", {
+      const res = await fetch("http://localhost:5000/guardar_placa", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ placa, tipo, hora }),
+        body: JSON.stringify({ texto, tipo }),
       });
 
       const data = await res.json();
-      console.log("Guardado en BD:", data);
-      alert(`Placa ${placa} guardada correctamente.`);
+      alert(`Placa ${texto} guardada correctamente.`);
     } catch (error) {
       console.error("Error al guardar en la base de datos:", error);
-      alert(`Error al guardar la placa ${placa}`);
+      alert(`Error al guardar la placa ${texto}`);
     } finally {
       setGuardando(null);
     }
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Detector de Placas</h2>
+    <div className="detector-container">
+      <h2 className="detector-title">Detector de Placas</h2>
 
-      <div className="flex flex-col sm:flex-row items-start gap-4 mb-6">
+      <div className="upload-section">
         <input
           type="file"
           accept="image/*"
           onChange={handleChange}
-          className="block w-full sm:w-auto border rounded px-3 py-2 text-sm"
+          className="file-input"
         />
-        <Button onClick={handleUpload} className="bg-primary hover:bg-primary/90">
-          <UploadCloud className="h-4 w-4 mr-2" />
+        <button onClick={handleUpload} className="upload-button">
+          <UploadCloud className="w-5 h-5" />
           Subir y Detectar
-        </Button>
+        </button>
       </div>
 
+      <nav className="nav-links">
+        <Link to="/">Detector de Placas</Link>
+        <Link to="/registros">Ver Registros</Link>
+      </nav>
+
       {placas.length > 0 && (
-        <div className="bg-white shadow rounded-lg p-4 border">
-          <h3 className="text-lg font-semibold mb-2">Resultados</h3>
-          <ul className="space-y-4">
+        <div className="results-container">
+          <h3 className="results-title">Resultados</h3>
+          <ul>
             {placas.map((p, i) => (
-              <li key={i} className="bg-gray-100 rounded p-3 flex justify-between items-center">
+              <li key={i} className="placa-item">
                 <div>
-                  <strong>{p.texto}</strong> — Confianza: {p.confianza.toFixed(2)} <br />
-                  Tipo: {obtenerTipoVehiculo(p.texto)}
+                  <span className="placa-text">{p.texto}</span>
+                  <span className="placa-confianza">
+                    {" "}
+                    — Confianza: {p.confianza.toFixed(2)}
+                  </span>
+                  <br />
+                  <span className="placa-tipo">Tipo: {p.tipo}</span>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => guardarEnBaseDeDatos(p.texto)}
+                <button
+                  onClick={() => guardarEnBaseDeDatos(p.texto, p.tipo)}
                   disabled={guardando === p.texto}
+                  className="save-button"
                 >
-                  <Database className="w-4 h-4 mr-2" />
+                  <Database
+                    className={`save-icon ${guardando === p.texto ? "spin" : ""}`}
+                  />
                   {guardando === p.texto ? "Guardando..." : "Guardar"}
-                </Button>
+                </button>
               </li>
             ))}
           </ul>

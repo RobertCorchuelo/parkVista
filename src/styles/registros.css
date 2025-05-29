@@ -1,0 +1,52 @@
+/* Contenedor principal */
+.registros-container {
+    padding: 1.5rem;
+    max-width: 80rem;
+    margin: 0 auto;
+  }
+  
+  /* Título */
+  .registros-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+  }
+  
+  /* Tabla */
+  .registros-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #d1d5db; /* gray-300 */
+  }
+  
+  .registros-table thead tr {
+    background-color: #f3f4f6; /* gray-100 */
+  }
+  
+  .registros-table th,
+  .registros-table td {
+    border: 1px solid #d1d5db;
+    padding: 0.5rem;
+    text-align: center;
+  }
+  
+  .registros-table tbody tr:hover {
+    background-color: #f9fafb; /* gray-50 */
+  }
+  
+  /* Factura */
+  .factura-box {
+    margin-top: 1.5rem;
+    background-color: #fefce8; /* yellow-50 */
+    border-left: 4px solid #f59e0b; /* yellow-500 */
+    padding: 1rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .factura-text {
+    white-space: pre-wrap;
+    font-size: 0.875rem;
+    font-family: monospace;
+  }
+  

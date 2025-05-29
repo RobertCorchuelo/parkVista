@@ -6,6 +6,7 @@ import numpy as np
 import re
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import pytz
 
 app = Flask(__name__)
 CORS(app)
@@ -16,9 +17,14 @@ reader = easyocr.Reader(['en'])
 # Configuración de SQLite
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vehiculos.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Inicializar base de datos
 db = SQLAlchemy(app)
 
-# Expresión regular para placas de carros y motos (con guion o espacio opcional)
+# Zona horaria local
+zona_colombia = pytz.timezone('America/Bogota')
+
+# Expresión regular para placas de carros y motos
 patron_placa = re.compile(r"^[A-Z]{3}[- ]?\d{3}$|^[A-Z]{3}[- ]?\d{2}[A-Z]$")
 
 # Modelo de base de datos
@@ -26,12 +32,26 @@ class RegistroPlaca(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     placa = db.Column(db.String(10), nullable=False)
     tipo = db.Column(db.String(10), nullable=False)
-    hora = db.Column(db.DateTime, default=datetime.utcnow)
+    hora = db.Column(db.DateTime, default=lambda: datetime.now(zona_colombia))
 
 with app.app_context():
     db.create_all()
 
-# Función para clasificar el tipo de vehículo
+@app.route('/registros', methods=['GET'])
+def obtener_registros():
+    try:
+        registros = RegistroPlaca.query.order_by(RegistroPlaca.hora.desc()).all()
+        lista = [{
+            'id': r.id,
+            'placa': r.placa,
+            'tipo': r.tipo,
+            'hora': r.hora.isoformat()
+        } for r in registros]
+        return jsonify(lista), 200
+    except Exception as e:
+        print("Error al obtener registros:", e)
+        return jsonify({'error': 'Error al obtener los registros'}), 500
+
 def clasificar_vehiculo(texto):
     if re.match(r"^[A-Z]{3}\d{3}$", texto):
         return "Carro"
@@ -40,7 +60,6 @@ def clasificar_vehiculo(texto):
     else:
         return "Desconocido"
 
-# Función para formatear placa (eliminar guiones o espacios innecesarios)
 def formatear_placa(texto):
     return re.sub(r"[- ]", "", texto)
 
@@ -60,12 +79,8 @@ def detectar_placa():
     placas_detectadas = []
 
     for (_, text, prob) in results:
-        print(f"Texto detectado: '{text}' con confianza: {round(prob, 2)}")
-
-        # Permitir letras mayúsculas, números, guion y espacio para detectar correctamente
         texto_limpio = re.sub(r'[^A-Z0-9- ]', '', text.upper())
 
-        # Elimina 'I' inicial si parece un error común
         if len(texto_limpio) >= 7 and texto_limpio.startswith('I') and texto_limpio[1:4].isalpha():
             texto_limpio = texto_limpio[1:]
 
@@ -78,32 +93,64 @@ def detectar_placa():
                     'confianza': round(prob, 2),
                     'tipo': tipo
                 })
-                print(f"Placa válida: {texto_formateado} (tipo: {tipo})")
 
     return jsonify({'placas': placas_detectadas})
 
-
-@app.route('/guardar', methods=['POST'])
+@app.route('/guardar_placa', methods=['POST'])
 def guardar_placa():
     data = request.get_json()
-
-    placa = data.get('placa')
+    texto = data.get('texto')
     tipo = data.get('tipo')
-    hora_str = data.get('hora')  # Se espera una string tipo ISO 8601
 
-    if not (placa and tipo and hora_str):
+    if not (texto and tipo):
         return jsonify({'error': 'Faltan datos'}), 400
 
     try:
-        hora = datetime.fromisoformat(hora_str)
-        nuevo_registro = RegistroPlaca(placa=placa.upper(), tipo=tipo, hora=hora)
-        db.session.add(nuevo_registro)
+        nuevo = RegistroPlaca(placa=texto.upper(), tipo=tipo)
+        db.session.add(nuevo)
         db.session.commit()
         return jsonify({'mensaje': 'Placa guardada exitosamente'}), 200
     except Exception as e:
-        print("Error al guardar en base de datos:", e)
-        return jsonify({'error': 'Error al guardar en base de datos'}), 500
+        print("Error:", e)
+        return jsonify({'error': 'Error al guardar'}), 500
 
+@app.route('/salida/<int:id>', methods=['DELETE'])
+def registrar_salida(id):
+    try:
+        registro = RegistroPlaca.query.get(id)
+        if not registro:
+            return jsonify({'error': 'Registro no encontrado'}), 404
+
+        hora_salida = datetime.now(zona_colombia)
+
+        # Convertir hora almacenada (posiblemente naive) a aware con zona Colombia
+        if registro.hora.tzinfo is None:
+            hora_entrada_aware = zona_colombia.localize(registro.hora)
+        else:
+            hora_entrada_aware = registro.hora
+
+        minutos = int((hora_salida - hora_entrada_aware).total_seconds() / 60)
+        tarifa = 100 if registro.tipo.lower() == 'carro' else 50
+        total = minutos * tarifa
+
+        factura = {
+            'placa': registro.placa,
+            'tipo': registro.tipo,
+            'hora_entrada': hora_entrada_aware.isoformat(),
+            'hora_salida': hora_salida.isoformat(),
+            'minutos': minutos,
+            'valor_por_minuto': tarifa,
+            'total_pagar': total
+        }
+
+        db.session.delete(registro)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Salida registrada', 'factura': factura}), 200
+
+    except Exception as e:
+        print("Error al registrar salida:", e)
+        return jsonify({'error': f'Error al registrar salida: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
